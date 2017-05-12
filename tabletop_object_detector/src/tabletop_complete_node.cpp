@@ -41,7 +41,7 @@
 
 #include "tabletop_object_detector/TabletopDetection.h"
 #include "tabletop_object_detector/TabletopSegmentation.h"
-#include "tabletop_object_detector/TabletopObjectRecognition.h"
+//#include "tabletop_object_detector/TabletopObjectRecognition.h"
 
 namespace tabletop_object_detector {
 
@@ -52,7 +52,7 @@ private:
   ros::NodeHandle priv_nh_;
 
   ros::ServiceClient seg_srv_;
-  ros::ServiceClient rec_srv_;
+  //ros::ServiceClient rec_srv_;
   ros::ServiceServer complete_srv_;
   
   //! Whether to perform a merge step based on model fit results
@@ -75,7 +75,7 @@ TabletopCompleteNode::TabletopCompleteNode() : nh_(""), priv_nh_("~")
   }
   if (!nh_.ok()) exit(0);
   seg_srv_ = nh_.serviceClient<TabletopSegmentation>(service_name, true);
-
+/*
   priv_nh_.param<std::string>("recognition_srv", service_name, "/tabletop_object_recognition");
   while ( !ros::service::waitForService(service_name, ros::Duration(2.0)) && nh_.ok() ) 
   {
@@ -84,6 +84,7 @@ TabletopCompleteNode::TabletopCompleteNode() : nh_(""), priv_nh_("~")
   if (!nh_.ok()) exit(0);
   rec_srv_ = nh_.serviceClient<TabletopObjectRecognition>(service_name, true);
   
+  */
   complete_srv_ = nh_.advertiseService("object_detection", &TabletopCompleteNode::serviceCallback, this);
   ROS_INFO("Tabletop complete node ready");
 
@@ -109,7 +110,7 @@ bool TabletopCompleteNode::serviceCallback(TabletopDetection::Request &request, 
   response.detection.table = segmentation_srv.response.table;
   response.detection.clusters = segmentation_srv.response.clusters;
   if (segmentation_srv.response.clusters.empty() || !request.return_models) return true;
-
+/*
   tabletop_object_detector::TabletopObjectRecognition recognition_srv;
   recognition_srv.request.table = segmentation_srv.response.table;
   recognition_srv.request.clusters = segmentation_srv.response.clusters;
@@ -123,6 +124,7 @@ bool TabletopCompleteNode::serviceCallback(TabletopDetection::Request &request, 
   }
   response.detection.models = recognition_srv.response.models;
   response.detection.cluster_model_indices = recognition_srv.response.cluster_model_indices;
+  */
   return true;
 } 
 
@@ -130,6 +132,8 @@ bool TabletopCompleteNode::serviceCallback(TabletopDetection::Request &request, 
 
 int main(int argc, char **argv)
 {
+  std::cout << "in tabletop_complete_node.cpp" << std::endl;
+
   ros::init(argc, argv, "tabletop_node");
   ros::NodeHandle nh;
   tabletop_object_detector::TabletopCompleteNode node;

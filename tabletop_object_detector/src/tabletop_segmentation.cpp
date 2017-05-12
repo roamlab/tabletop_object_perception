@@ -157,6 +157,8 @@ public:
   /*! Also attempts to connect to database */
   TabletopSegmentor(ros::NodeHandle nh) : nh_(nh), priv_nh_("~")
   {
+    ROS_INFO("in TabletopSegmentor initializer\n");
+
     num_markers_published_ = 1;
     current_marker_id_ = 1;
 
@@ -169,23 +171,24 @@ public:
     priv_nh_.param<int>("inlier_threshold", inlier_threshold_, 300);
     priv_nh_.param<double>("plane_detection_voxel_size", plane_detection_voxel_size_, 0.01);
     priv_nh_.param<double>("clustering_voxel_size", clustering_voxel_size_, 0.003);
-    priv_nh_.param<double>("z_filter_min", z_filter_min_, 0.4);
-    priv_nh_.param<double>("z_filter_max", z_filter_max_, 1.25);
-    priv_nh_.param<double>("y_filter_min", y_filter_min_, -1.0);
-    priv_nh_.param<double>("y_filter_max", y_filter_max_, 1.0);
-    priv_nh_.param<double>("x_filter_min", x_filter_min_, -1.0);
-    priv_nh_.param<double>("x_filter_max", x_filter_max_, 1.0);
-    priv_nh_.param<double>("table_z_filter_min", table_z_filter_min_, 0.01);
-    priv_nh_.param<double>("table_z_filter_max", table_z_filter_max_, 0.50);
+    priv_nh_.param<double>("z_filter_min", z_filter_min_, -2.0);
+    priv_nh_.param<double>("z_filter_max", z_filter_max_, 0.5);
+    priv_nh_.param<double>("y_filter_min", y_filter_min_, -2.0);
+    priv_nh_.param<double>("y_filter_max", y_filter_max_, 2.0);
+    priv_nh_.param<double>("x_filter_min", x_filter_min_, -2.0);
+    priv_nh_.param<double>("x_filter_max", x_filter_max_, 2.0);
+    priv_nh_.param<double>("table_z_filter_min", table_z_filter_min_, 0.1);
+    priv_nh_.param<double>("table_z_filter_max", table_z_filter_max_, 1);
     priv_nh_.param<double>("cluster_distance", cluster_distance_, 0.03);
-    priv_nh_.param<int>("min_cluster_size", min_cluster_size_, 300);
-    priv_nh_.param<std::string>("processing_frame", processing_frame_, "");
-    priv_nh_.param<double>("up_direction", up_direction_, -1.0);   
+    priv_nh_.param<int>("min_cluster_size", min_cluster_size_, 100);
+    priv_nh_.param<std::string>("processing_frame", processing_frame_, "/world");
+    priv_nh_.param<double>("up_direction", up_direction_, 1.0);   
     priv_nh_.param<bool>("flatten_table", flatten_table_, false);   
-    priv_nh_.param<double>("table_padding", table_padding_, 0.0);   
+    priv_nh_.param<double>("table_padding", table_padding_, 0.2);   
     if(flatten_table_) ROS_DEBUG("flatten_table is true");
     else ROS_DEBUG("flatten_table is false");
 
+    ROS_INFO("exiting TabletopSegmentor initializer\n");
   }
 
   //! Empty stub
@@ -198,7 +201,7 @@ bool TabletopSegmentor::serviceCallback(TabletopSegmentation::Request &request,
                                         TabletopSegmentation::Response &response)
 {
   ros::Time start_time = ros::Time::now();
-  std::string topic = nh_.resolveName("cloud_in");
+  std::string topic = nh_.resolveName("/camera/depth_registered/points");
   ROS_INFO("Tabletop detection service called; waiting for a point_cloud2 on topic %s", topic.c_str());
 
   sensor_msgs::PointCloud2::ConstPtr recent_cloud = 
@@ -688,7 +691,7 @@ void TabletopSegmentor::processCloud(const sensor_msgs::PointCloud2 &cloud,
   pcl::PointCloud<Point>::Ptr cloud_filtered_ptr (new pcl::PointCloud<Point>); 
   pass_.filter (*cloud_filtered_ptr);
   
-  ROS_INFO("Step 1 done");
+  ROS_INFO("Step 1 done: filtered points");
   if (cloud_filtered_ptr->points.size() < (unsigned int)min_cluster_size_)
   {
     ROS_INFO("Filtered cloud only has %d points", (int)cloud_filtered_ptr->points.size());
@@ -710,7 +713,7 @@ void TabletopSegmentor::processCloud(const sensor_msgs::PointCloud2 &cloud,
   pcl::PointCloud<pcl::Normal>::Ptr cloud_normals_ptr (new pcl::PointCloud<pcl::Normal>); 
   n3d_.setInputCloud (cloud_downsampled_ptr);
   n3d_.compute (*cloud_normals_ptr);
-  ROS_INFO("Step 2 done");
+  ROS_INFO("Step 2 done: estimated normals to table");
 
 
   // Step 3 : Perform planar segmentation, if table is not given, otherwise use given table
@@ -759,7 +762,7 @@ void TabletopSegmentor::processCloud(const sensor_msgs::PointCloud2 &cloud,
               (int)table_inliers_ptr->indices.size (),
               table_coefficients_ptr->values[0], table_coefficients_ptr->values[1], 
               table_coefficients_ptr->values[2], table_coefficients_ptr->values[3]);
-    ROS_INFO("Step 3 done");
+    ROS_INFO("Step 3 done: found table");
 
     // Step 4 : Project the table inliers on the table
     pcl::PointCloud<Point>::Ptr table_projected_ptr (new pcl::PointCloud<Point>); 
@@ -767,7 +770,7 @@ void TabletopSegmentor::processCloud(const sensor_msgs::PointCloud2 &cloud,
     proj_.setIndices (table_inliers_ptr);
     proj_.setModelCoefficients (table_coefficients_ptr);
     proj_.filter (*table_projected_ptr);
-    ROS_INFO("Step 4 done");
+    ROS_INFO("Step 4 done: Project the table inliers on the table");
   
     sensor_msgs::PointCloud table_points;
     sensor_msgs::PointCloud table_hull_points;
@@ -893,7 +896,7 @@ void TabletopSegmentor::processCloud(const sensor_msgs::PointCloud2 &cloud,
   std::vector<sensor_msgs::PointCloud> clusters;
   getClustersFromPointCloud2<Point> (*cloud_objects_downsampled_ptr, clusters2, clusters);
   ROS_INFO("Clusters converted");
-  response.clusters = clusters;  
+  response.clusters = clusters;
 
   publishClusterMarkers(clusters, cloud.header);
 }
@@ -903,6 +906,7 @@ void TabletopSegmentor::processCloud(const sensor_msgs::PointCloud2 &cloud,
 
 int main(int argc, char **argv) 
 {
+  ROS_INFO("HELLO");
   ros::init(argc, argv, "tabletop_segmentation_node");
   ros::NodeHandle nh;
 
